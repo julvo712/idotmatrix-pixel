@@ -42,7 +42,9 @@ name = "idotmatrix"
 version = "0.1.0"
 description = "A library for controlling iDotMatrix displays."
 authors = ["iDotMatrix Contributors"]
-python = ">=3.12,<3.14"
 packages = [
     { include = "idotmatrix" },
 ]
+
+[tool.poetry.dependencies]
+python = ">=3.12,<3.14"
