@@ -1,0 +1,17 @@
+[Unit]
+Description=iDotMatrix Web Server
+After=network.target bluetooth.target
+
+[Service]
+Type=simple
+User=idotmatrix
+WorkingDirectory=/opt/idotmatrix/server
+ExecStart=/opt/idotmatrix/server/.venv/bin/python -m idotmatrix_web.main
+Restart=on-failure
+RestartSec=5
+Environment=IDOTMATRIX_PORT=8080
+Environment=IDOTMATRIX_WEB_DIST_PATH=/opt/idotmatrix/web/dist
+AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN
+
+[Install]
+WantedBy=multi-user.target
