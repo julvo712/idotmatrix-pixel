@@ -1,6 +1,6 @@
+import asyncio
 import io
-import tempfile
-from typing import Optional
+import logging
 
 from fastapi import APIRouter, UploadFile, Form
 from PIL import Image as PILImage, ImageOps
@@ -9,9 +9,9 @@ from idotmatrix.util.image_utils import ResizeMode
 
 from ..device_manager import device_manager
 
-router = APIRouter(prefix="/api")
+logger = logging.getLogger(__name__)
 
-CANVAS_SIZE = 64
+router = APIRouter(prefix="/api")
 
 RESIZE_MODE_MAP = {
     "fit": ResizeMode.FIT,
@@ -43,7 +43,6 @@ def _crop_and_resize_image(
         new_h = int(img.height * ratio)
         img = img.resize((new_w, new_h), PILImage.Resampling.LANCZOS)
 
-        # Apply crop offset (0.0–1.0)
         max_x = new_w - canvas_size
         max_y = new_h - canvas_size
         left = int(max_x * crop_x)
@@ -75,11 +74,20 @@ async def upload_image(
     canvas_size = device_manager.screen_size
 
     with PILImage.open(io.BytesIO(contents)) as img:
+        logger.info("Image upload: original %dx%d, resizing to %dx%d (mode=%s, crop=%.2f,%.2f)",
+                     img.width, img.height, canvas_size, canvas_size, resize_mode, crop_x, crop_y)
         img = _crop_and_resize_image(img, canvas_size, mode, crop_x, crop_y)
         pixel_data = bytearray(img.tobytes())
 
-    await device_manager.client.image.set_mode(1)
-    await device_manager.client.image._send_diy_image_data(pixel_data)
+    logger.info("Image data: %d bytes (%dx%d RGB), sending to device...",
+                len(pixel_data), canvas_size, canvas_size)
+
+    async with device_manager._send_lock:
+        await device_manager.client.image.set_mode(1)
+        await asyncio.sleep(0.3)
+        await device_manager.client.image._send_diy_image_data(pixel_data)
+
+    logger.info("Image upload complete")
     return {"ok": True}
 
 
@@ -95,10 +103,15 @@ async def upload_gif(
     canvas_size = device_manager.screen_size
 
     gif_data = _process_gif(contents, canvas_size, mode, crop_x, crop_y)
+    logger.info("GIF processed: %d bytes, sending to device...", len(gif_data))
 
     gif_module = device_manager.client.gif
     packets = gif_module.create_gif_data_packets(gif_data, gif_type=12, time_sign=1)
-    await gif_module._send_packets(packets=packets, response=True)
+
+    async with device_manager._send_lock:
+        await gif_module._send_packets(packets=packets, response=True)
+
+    logger.info("GIF upload complete")
     return {"ok": True}
 
 
@@ -114,6 +127,9 @@ def _process_gif(
     GifImagePlugin.LOADING_STRATEGY = GifImagePlugin.LoadingStrategy.RGB_AFTER_DIFFERENT_PALETTE_ONLY
 
     with PILImage.open(io.BytesIO(contents)) as img:
+        logger.info("GIF upload: original %dx%d, %s frames",
+                     img.width, img.height, getattr(img, 'n_frames', '?'))
+
         frames = []
         durations = []
         try:
@@ -141,6 +157,8 @@ def _process_gif(
             processed.append(
                 _crop_and_resize_frame(frame, canvas_size, resize_mode, crop_x, crop_y)
             )
+
+        logger.info("GIF: %d frames at %dx%d, re-encoding...", len(processed), canvas_size, canvas_size)
 
         # Re-encode as GIF
         buf = io.BytesIO()
