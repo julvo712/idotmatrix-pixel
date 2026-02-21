@@ -102,20 +102,24 @@ async def upload_gif(
     mode = RESIZE_MODE_MAP.get(resize_mode, ResizeMode.FILL)
     canvas_size = device_manager.screen_size
 
-    gif_data = _process_gif(contents, canvas_size, mode, crop_x, crop_y)
+    gif_data = process_gif(contents, canvas_size, mode, crop_x, crop_y)
     logger.info("GIF processed: %d bytes, sending to device...", len(gif_data))
 
-    gif_module = device_manager.client.gif
-    packets = gif_module.create_gif_data_packets(gif_data, gif_type=12, time_sign=1)
-
-    async with device_manager._send_lock:
-        await gif_module._send_packets(packets=packets, response=True)
+    await send_gif_to_device(gif_data)
 
     logger.info("GIF upload complete")
     return {"ok": True}
 
 
-def _process_gif(
+async def send_gif_to_device(gif_data: bytes) -> None:
+    """Send processed GIF bytes to the device."""
+    gif_module = device_manager.client.gif
+    packets = gif_module.create_gif_data_packets(gif_data, gif_type=12, time_sign=1)
+    async with device_manager._send_lock:
+        await gif_module._send_packets(packets=packets, response=True)
+
+
+def process_gif(
     contents: bytes,
     canvas_size: int,
     resize_mode: ResizeMode,

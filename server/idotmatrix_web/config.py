@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     AUTO_RECONNECT: bool = True
     AUTO_CONNECT: bool = True
+    GIPHY_API_KEY: str | None = None
 
 
 settings = Settings()

@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .device_manager import device_manager
-from .routes import device, send, upload
+from .routes import device, giphy, send, upload
 
 
 @asynccontextmanager
@@ -38,6 +38,7 @@ app.add_middleware(
 app.include_router(device.router)
 app.include_router(send.router)
 app.include_router(upload.router)
+app.include_router(giphy.router)
 
 # Mount static files last so API routes take priority
 dist_path = Path(settings.WEB_DIST_PATH)
