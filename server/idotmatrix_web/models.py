@@ -18,6 +18,7 @@ class SendPacketsRequest(BaseModel):
 
 class DeviceStatus(BaseModel):
     connected: bool
+    reconnecting: bool = False
     macAddress: str | None = None
     screenSize: int
 

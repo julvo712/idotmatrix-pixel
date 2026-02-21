@@ -10,8 +10,10 @@ function uint8ToBase64(data: Uint8Array): string {
 
 export class HttpTransport implements ITransport {
   private _connected = false;
+  private _reconnecting = false;
   private _deviceName: string | null = null;
   private _disconnectCb: (() => void) | null = null;
+  private _reconnectCb: (() => void) | null = null;
   private _pollTimer: ReturnType<typeof setInterval> | null = null;
   private _macAddress: string | null = null;
   private _screenSize: number | null = null;
@@ -26,7 +28,6 @@ export class HttpTransport implements ITransport {
   }
 
   async connect(): Promise<void> {
-    // If no mac address yet, scan first
     if (!this._macAddress) {
       await this.scan();
     }
@@ -42,6 +43,7 @@ export class HttpTransport implements ITransport {
     if (!res.ok) throw new Error('Connect failed');
     const status = await res.json();
     this._connected = status.connected;
+    this._reconnecting = false;
     this._deviceName = status.macAddress ? `IDM (${status.macAddress})` : 'IDM (server)';
     this._startPolling();
   }
@@ -50,11 +52,16 @@ export class HttpTransport implements ITransport {
     this._stopPolling();
     await fetch('/api/device/disconnect', { method: 'POST' });
     this._connected = false;
+    this._reconnecting = false;
     this._deviceName = null;
   }
 
   isConnected(): boolean {
     return this._connected;
+  }
+
+  isReconnecting(): boolean {
+    return this._reconnecting;
   }
 
   deviceName(): string | null {
@@ -98,24 +105,41 @@ export class HttpTransport implements ITransport {
     this._disconnectCb = cb;
   }
 
+  onReconnect(cb: () => void): void {
+    this._reconnectCb = cb;
+  }
+
   private _startPolling(): void {
     this._stopPolling();
     this._pollTimer = setInterval(async () => {
       try {
         const res = await fetch('/api/device/status');
-        if (res.ok) {
-          const status = await res.json();
-          if (!status.connected && this._connected) {
-            this._connected = false;
-            this._deviceName = null;
-            this._disconnectCb?.();
-            this._stopPolling();
-          }
+        if (!res.ok) return;
+        const status = await res.json();
+
+        if (status.connected && !this._connected) {
+          // Reconnected!
+          this._connected = true;
+          this._reconnecting = false;
+          this._reconnectCb?.();
+        } else if (!status.connected && status.reconnecting) {
+          // Server is trying to reconnect — keep polling, show reconnecting
+          this._connected = false;
+          this._reconnecting = true;
+          // Don't fire disconnect callback — server is handling it
+        } else if (!status.connected && !status.reconnecting && this._connected) {
+          // Truly disconnected, server gave up
+          this._connected = false;
+          this._reconnecting = false;
+          this._deviceName = null;
+          this._disconnectCb?.();
+          this._stopPolling();
         }
       } catch {
-        // Server unreachable, treat as disconnect
-        if (this._connected) {
+        // Server unreachable
+        if (this._connected || this._reconnecting) {
           this._connected = false;
+          this._reconnecting = false;
           this._deviceName = null;
           this._disconnectCb?.();
           this._stopPolling();

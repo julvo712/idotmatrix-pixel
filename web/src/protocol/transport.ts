@@ -10,10 +10,12 @@ export interface ITransport {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   isConnected(): boolean;
+  isReconnecting?(): boolean;
   deviceName(): string | null;
   sendBytes(data: Uint8Array, withResponse?: boolean): Promise<void>;
   sendPackets(packets: Uint8Array[][], withResponse?: boolean): Promise<void>;
   onDisconnect(cb: () => void): void;
+  onReconnect?(cb: () => void): void;
 }
 
 export class WebBluetoothTransport implements ITransport {

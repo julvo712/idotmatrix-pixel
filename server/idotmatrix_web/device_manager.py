@@ -23,6 +23,8 @@ class DeviceManager:
         self._connection_lock = asyncio.Lock()
         self._send_lock = asyncio.Lock()
         self._connected = False
+        self._reconnecting = False
+        self._has_ever_connected = False
 
     def _ensure_client(self) -> IDotMatrixClient:
         if self._client is None:
@@ -48,6 +50,10 @@ class DeviceManager:
         return self._connected
 
     @property
+    def reconnecting(self) -> bool:
+        return self._reconnecting
+
+    @property
     def screen_size(self) -> int:
         return self._screen_size
 
@@ -59,11 +65,20 @@ class DeviceManager:
 
     async def _on_connected(self) -> None:
         self._connected = True
+        self._reconnecting = False
+        self._has_ever_connected = True
         logger.info("Device connected")
 
     async def _on_disconnected(self) -> None:
+        was_connected = self._connected
         self._connected = False
-        logger.info("Device disconnected")
+
+        if was_connected and settings.AUTO_RECONNECT and self._has_ever_connected:
+            self._reconnecting = True
+            logger.info("Device disconnected — auto-reconnect active, will retry")
+        else:
+            self._reconnecting = False
+            logger.info("Device disconnected")
 
     async def scan(self) -> list[str]:
         return await ConnectionManager.discover_devices()
@@ -80,11 +95,14 @@ class DeviceManager:
                 client.mac_address = mac_address
                 client._connection_manager.set_address(mac_address)
 
+            self._reconnecting = False
             await client.connect()
 
     async def disconnect(self) -> None:
         async with self._connection_lock:
-            if self._client and self._connected:
+            self._reconnecting = False
+            self._has_ever_connected = False
+            if self._client:
                 await self._client.disconnect()
 
     async def send_bytes(self, data: bytes, with_response: bool = False) -> None:

@@ -7,6 +7,7 @@ export type TransportMode = 'bluetooth' | 'server' | 'detecting';
 interface DeviceState {
   connected: boolean;
   connecting: boolean;
+  reconnecting: boolean;
   deviceName: string | null;
   error: string | null;
   transport: ITransport;
@@ -36,8 +37,25 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
   const [transportMode, setTransportMode] = useState<TransportMode>('detecting');
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
   const [deviceName, setDeviceName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Poll reconnecting state from transport
+  useEffect(() => {
+    if (transportMode !== 'server') return;
+    const interval = setInterval(() => {
+      const t = transportRef.current;
+      const isReconn = t.isReconnecting?.() ?? false;
+      setReconnecting(isReconn);
+      if (t.isConnected() && !connected) {
+        setConnected(true);
+        setDeviceName(t.deviceName());
+        setReconnecting(false);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [transportMode, connected]);
 
   useEffect(() => {
     detectServer().then((serverAvailable) => {
@@ -54,13 +72,28 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
   const connect = useCallback(async () => {
     setConnecting(true);
     setError(null);
+    setReconnecting(false);
     try {
       await transportRef.current.connect();
       setConnected(true);
       setDeviceName(transportRef.current.deviceName());
+
       transportRef.current.onDisconnect(() => {
-        setConnected(false);
-        setDeviceName(null);
+        // Check if transport is reconnecting before declaring disconnected
+        const isReconn = transportRef.current.isReconnecting?.() ?? false;
+        if (isReconn) {
+          setReconnecting(true);
+        } else {
+          setConnected(false);
+          setDeviceName(null);
+          setReconnecting(false);
+        }
+      });
+
+      transportRef.current.onReconnect?.(() => {
+        setConnected(true);
+        setReconnecting(false);
+        setDeviceName(transportRef.current.deviceName());
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Connection failed');
@@ -73,6 +106,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     await transportRef.current.disconnect();
     setConnected(false);
     setDeviceName(null);
+    setReconnecting(false);
   }, []);
 
   const send = useCallback(async (data: Uint8Array, withResponse = false) => {
@@ -97,6 +131,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     <DeviceContext.Provider value={{
       connected,
       connecting,
+      reconnecting,
       deviceName,
       error,
       transport: transportRef.current,

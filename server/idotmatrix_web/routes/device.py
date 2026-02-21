@@ -15,6 +15,7 @@ async def health() -> dict:
 async def status() -> DeviceStatus:
     return DeviceStatus(
         connected=device_manager.connected,
+        reconnecting=device_manager.reconnecting,
         macAddress=device_manager.mac_address,
         screenSize=device_manager.screen_size,
     )
@@ -33,6 +34,7 @@ async def connect(req: ConnectRequest | None = None) -> DeviceStatus:
     await device_manager.connect(mac_address=mac, screen_size=size)
     return DeviceStatus(
         connected=device_manager.connected,
+        reconnecting=device_manager.reconnecting,
         macAddress=device_manager.mac_address,
         screenSize=device_manager.screen_size,
     )
@@ -43,6 +45,7 @@ async def disconnect() -> DeviceStatus:
     await device_manager.disconnect()
     return DeviceStatus(
         connected=device_manager.connected,
+        reconnecting=device_manager.reconnecting,
         macAddress=device_manager.mac_address,
         screenSize=device_manager.screen_size,
     )

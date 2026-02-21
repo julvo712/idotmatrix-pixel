@@ -1,17 +1,22 @@
 import { useDevice } from '../context/DeviceContext.tsx';
 
 export default function ConnectionPanel() {
-  const { connected, connecting, deviceName, error, transportMode, connect, disconnect } = useDevice();
+  const { connected, connecting, reconnecting, deviceName, error, transportMode, connect, disconnect } = useDevice();
+
+  const statusColor = connected ? 'bg-green-500' : reconnecting ? 'bg-yellow-500 animate-pulse' : 'bg-red-500';
+  const statusText = connected
+    ? `Connected to ${deviceName}`
+    : reconnecting
+      ? 'Reconnecting...'
+      : 'Disconnected';
 
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-bold">Connection</h2>
 
       <div className="flex items-center gap-3">
-        <div className={`w-3 h-3 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`} />
-        <span className="text-sm">
-          {connected ? `Connected to ${deviceName}` : 'Disconnected'}
-        </span>
+        <div className={`w-3 h-3 rounded-full ${statusColor}`} />
+        <span className="text-sm">{statusText}</span>
         {transportMode !== 'detecting' && (
           <span className={`text-xs px-2 py-0.5 rounded-full ${
             transportMode === 'server'
@@ -30,7 +35,7 @@ export default function ConnectionPanel() {
       )}
 
       <div className="flex gap-2">
-        {!connected ? (
+        {!connected && !reconnecting ? (
           <button
             onClick={connect}
             disabled={connecting || transportMode === 'detecting'}
