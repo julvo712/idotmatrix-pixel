@@ -8,12 +8,14 @@ interface DeviceState {
   connected: boolean;
   connecting: boolean;
   reconnecting: boolean;
+  autoConnect: boolean;
   deviceName: string | null;
   error: string | null;
   transport: ITransport;
   transportMode: TransportMode;
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
+  setAutoConnect: (enabled: boolean) => Promise<void>;
   send: (data: Uint8Array, withResponse?: boolean) => Promise<void>;
   sendPackets: (packets: Uint8Array[][], withResponse?: boolean) => Promise<void>;
 }
@@ -39,19 +41,19 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
   const [connecting, setConnecting] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
   const [deviceName, setDeviceName] = useState<string | null>(null);
+  const [autoConnect, setAutoConnectState] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Sync React state from transport every second — single source of truth
   useEffect(() => {
     const interval = setInterval(() => {
       const t = transportRef.current;
-      const tConnected = t.isConnected();
-      const tReconnecting = t.isReconnecting?.() ?? false;
-      const tName = t.deviceName();
-
-      setConnected(tConnected);
-      setReconnecting(tReconnecting);
-      setDeviceName(tName);
+      setConnected(t.isConnected());
+      setReconnecting(t.isReconnecting?.() ?? false);
+      setDeviceName(t.deviceName());
+      if ('autoConnect' in t && typeof (t as any).autoConnect === 'function') {
+        setAutoConnectState((t as any).autoConnect());
+      }
     }, 1000);
     return () => clearInterval(interval);
   }, []);
@@ -81,6 +83,14 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
       setError(e instanceof Error ? e.message : 'Connection failed');
     } finally {
       setConnecting(false);
+    }
+  }, []);
+
+  const setAutoConnect = useCallback(async (enabled: boolean) => {
+    const t = transportRef.current;
+    if ('setAutoConnect' in t && typeof (t as any).setAutoConnect === 'function') {
+      await (t as any).setAutoConnect(enabled);
+      setAutoConnectState(enabled);
     }
   }, []);
 
@@ -114,12 +124,14 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
       connected,
       connecting,
       reconnecting,
+      autoConnect,
       deviceName,
       error,
       transport: transportRef.current,
       transportMode,
       connect,
       disconnect,
+      setAutoConnect,
       send,
       sendPackets,
     }}>

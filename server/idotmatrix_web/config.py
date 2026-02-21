@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     WEB_DIST_PATH: str = "../web/dist"
     LOG_LEVEL: str = "INFO"
     AUTO_RECONNECT: bool = True
+    AUTO_CONNECT: bool = True
 
 
 settings = Settings()

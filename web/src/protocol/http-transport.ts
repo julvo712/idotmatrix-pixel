@@ -11,6 +11,7 @@ function uint8ToBase64(data: Uint8Array): string {
 export class HttpTransport implements ITransport {
   private _connected = false;
   private _reconnecting = false;
+  private _autoConnect = false;
   private _deviceName: string | null = null;
   private _pollTimer: ReturnType<typeof setInterval> | null = null;
   private _macAddress: string | null = null;
@@ -99,6 +100,21 @@ export class HttpTransport implements ITransport {
     }
   }
 
+  autoConnect(): boolean {
+    return this._autoConnect;
+  }
+
+  async setAutoConnect(enabled: boolean): Promise<void> {
+    const res = await fetch('/api/device/auto-connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    });
+    if (!res.ok) throw new Error('Failed to set auto-connect');
+    const status = await res.json();
+    this._autoConnect = status.autoConnect;
+  }
+
   // Keep for interface compat — DeviceContext no longer relies on these
   onDisconnect(): void {}
   onReconnect(): void {}
@@ -113,6 +129,7 @@ export class HttpTransport implements ITransport {
 
         this._connected = status.connected;
         this._reconnecting = status.reconnecting;
+        this._autoConnect = status.autoConnect ?? false;
 
         if (status.connected) {
           if (!this._deviceName) {

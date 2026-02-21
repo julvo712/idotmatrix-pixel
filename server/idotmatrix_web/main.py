@@ -18,6 +18,8 @@ async def lifespan(app: FastAPI):
     logging.getLogger(__name__).info(
         "iDotMatrix Web Server starting on %s:%d", settings.HOST, settings.PORT
     )
+    # Start auto-connect background loop if enabled
+    device_manager.start_auto_connect()
     yield
     # Disconnect on shutdown
     if device_manager.connected:

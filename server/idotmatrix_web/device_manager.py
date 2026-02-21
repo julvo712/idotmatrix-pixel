@@ -25,6 +25,8 @@ class DeviceManager:
         self._connected = False
         self._reconnecting = False
         self._has_ever_connected = False
+        self._auto_connect = settings.AUTO_CONNECT
+        self._auto_connect_task: asyncio.Task | None = None
 
     def _ensure_client(self) -> IDotMatrixClient:
         if self._client is None:
@@ -63,6 +65,40 @@ class DeviceManager:
             return settings.MAC_ADDRESS
         return self._client.mac_address
 
+    @property
+    def auto_connect(self) -> bool:
+        return self._auto_connect
+
+    def set_auto_connect(self, enabled: bool) -> None:
+        self._auto_connect = enabled
+        if enabled and not self._connected:
+            self.start_auto_connect()
+        elif not enabled and self._auto_connect_task:
+            self._auto_connect_task.cancel()
+            self._auto_connect_task = None
+
+    def start_auto_connect(self) -> None:
+        """Start the auto-connect background loop if enabled."""
+        if not self._auto_connect:
+            return
+        if self._auto_connect_task and not self._auto_connect_task.done():
+            return  # already running
+        self._auto_connect_task = asyncio.create_task(self._auto_connect_loop())
+
+    async def _auto_connect_loop(self) -> None:
+        """Background loop: keep trying to connect until successful."""
+        retry_delay = 5
+        while self._auto_connect and not self._connected:
+            try:
+                logger.info("Auto-connect: attempting to connect...")
+                await self.connect()
+                if self._connected:
+                    logger.info("Auto-connect: connected successfully")
+                    return
+            except Exception as e:
+                logger.warning("Auto-connect: failed (%s), retrying in %ds", e, retry_delay)
+            await asyncio.sleep(retry_delay)
+
     async def _on_connected(self) -> None:
         self._connected = True
         self._reconnecting = False
@@ -76,6 +112,10 @@ class DeviceManager:
         if was_connected and settings.AUTO_RECONNECT and self._has_ever_connected:
             self._reconnecting = True
             logger.info("Device disconnected — auto-reconnect active, will retry")
+        elif was_connected and self._auto_connect:
+            self._reconnecting = True
+            logger.info("Device disconnected — auto-connect will retry")
+            self.start_auto_connect()
         else:
             self._reconnecting = False
             logger.info("Device disconnected")
@@ -102,6 +142,10 @@ class DeviceManager:
         async with self._connection_lock:
             self._reconnecting = False
             self._has_ever_connected = False
+            # Stop auto-connect loop so it doesn't immediately reconnect
+            if self._auto_connect_task:
+                self._auto_connect_task.cancel()
+                self._auto_connect_task = None
             if self._client:
                 await self._client.disconnect()
 
