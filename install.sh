@@ -35,14 +35,14 @@ git pull
 echo ""
 echo ">>> Installing idotmatrix-api-client..."
 cd "$REPO_DIR/idotmatrix-api-client"
-poetry lock --no-update
+poetry lock
 poetry install
 
 # --- 4. Server ---
 echo ""
 echo ">>> Installing server..."
 cd "$REPO_DIR/server"
-poetry lock --no-update
+poetry lock
 poetry install
 
 # --- 5. Frontend ---
