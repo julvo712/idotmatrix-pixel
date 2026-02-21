@@ -3,7 +3,7 @@ import { useDevice } from '../context/DeviceContext.tsx';
 import { gifPackets } from '../protocol/commands/gif.ts';
 
 export default function GifPanel() {
-  const { sendPackets, connected } = useDevice();
+  const { sendPackets, connected, transportMode } = useDevice();
   const [preview, setPreview] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [progress, setProgress] = useState('');
@@ -18,13 +18,23 @@ export default function GifPanel() {
   const upload = async () => {
     if (!fileRef.current || !connected) return;
     setSending(true);
-    setProgress('Reading GIF...');
+    setProgress('Uploading...');
     try {
-      const buf = await fileRef.current.arrayBuffer();
-      const gifData = new Uint8Array(buf);
-      setProgress(`Uploading ${(gifData.length / 1024).toFixed(1)} KB...`);
-      const packets = gifPackets(gifData);
-      await sendPackets(packets, true);
+      if (transportMode === 'server') {
+        const form = new FormData();
+        form.append('file', fileRef.current);
+        form.append('resize_mode', 'fill');
+        form.append('crop_x', '0.5');
+        form.append('crop_y', '0.5');
+        const res = await fetch('/api/upload/gif', { method: 'POST', body: form });
+        if (!res.ok) throw new Error(await res.text());
+      } else {
+        const buf = await fileRef.current.arrayBuffer();
+        const gifData = new Uint8Array(buf);
+        setProgress(`Uploading ${(gifData.length / 1024).toFixed(1)} KB...`);
+        const packets = gifPackets(gifData);
+        await sendPackets(packets, true);
+      }
       setProgress('Done!');
     } catch (e) {
       setProgress(`Error: ${e instanceof Error ? e.message : 'Upload failed'}`);
@@ -59,7 +69,9 @@ export default function GifPanel() {
       </div>
 
       <p className="text-xs text-gray-500">
-        For best results, use a 64x64 GIF with &lt;64 frames. The raw GIF bytes are sent directly to the device.
+        {transportMode === 'server'
+          ? 'GIFs are automatically resized and cropped to 64×64 on the server.'
+          : 'For best results, use a 64×64 GIF with <64 frames. The raw GIF bytes are sent directly to the device.'}
       </p>
 
       {progress && <p className="text-sm text-gray-300">{progress}</p>}
