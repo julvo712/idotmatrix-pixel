@@ -48,3 +48,9 @@ packages = [
 
 [tool.poetry.dependencies]
 python = ">=3.12,<3.14"
+asyncio = ">=3.4.3"
+bleak = ">=0.22.3"
+pillow = ">=11.2.1"
+cryptography = ">=45.0.4"
+matplotlib = ">=3.10.3"
+watchdog = ">=6.0.0"

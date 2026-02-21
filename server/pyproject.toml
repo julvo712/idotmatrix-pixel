@@ -4,13 +4,6 @@ version = "0.1.0"
 description = "Web server for controlling iDotMatrix displays via BLE"
 license = "GPL-3.0-or-later"
 requires-python = ">=3.12,<3.14"
-dependencies = [
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.30.0",
-    "pydantic-settings>=2.5.0",
-    "python-multipart>=0.0.9",
-    "idotmatrix",
-]
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
@@ -25,4 +18,8 @@ packages = [{ include = "idotmatrix_web" }]
 
 [tool.poetry.dependencies]
 python = ">=3.12,<3.14"
+fastapi = ">=0.115.0"
+uvicorn = { version = ">=0.30.0", extras = ["standard"] }
+pydantic-settings = ">=2.5.0"
+python-multipart = ">=0.0.9"
 idotmatrix = { path = "../idotmatrix-api-client", develop = true }
