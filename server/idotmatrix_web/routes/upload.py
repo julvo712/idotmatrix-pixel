@@ -149,14 +149,26 @@ def _process_gif(
             frames = [frames[i] for i in indices]
             durations = [durations[i] for i in indices]
 
-        # Resize/crop each frame
+        # Limit total animation duration to 2 seconds (device constraint)
+        total_duration = sum(durations[:len(frames)])
+        if total_duration > 2000 and len(frames) > 1:
+            target_frames = max(2, int(2000 / max(durations[0], 16)))
+            target_frames = min(target_frames, 64)
+            if target_frames < len(frames):
+                step = len(frames) / target_frames
+                indices = [int(i * step) for i in range(target_frames)]
+                frames = [frames[i] for i in indices]
+                durations = [durations[i] for i in indices]
+
+        # Resize/crop and palettize each frame
         processed = []
         for frame in frames:
             if frame.mode not in ("RGB", "RGBA"):
                 frame = frame.convert("RGBA")
-            processed.append(
-                _crop_and_resize_frame(frame, canvas_size, resize_mode, crop_x, crop_y)
-            )
+            frame = _crop_and_resize_frame(frame, canvas_size, resize_mode, crop_x, crop_y)
+            # Palettize to 256 colors — critical for keeping GIF size small
+            frame = frame.convert("P", palette=PILImage.Palette.ADAPTIVE, colors=256)
+            processed.append(frame)
 
         logger.info("GIF: %d frames at %dx%d, re-encoding...", len(processed), canvas_size, canvas_size)
 
@@ -173,7 +185,9 @@ def _process_gif(
             disposal=2,
         )
         buf.seek(0)
-        return buf.getvalue()
+        gif_bytes = buf.getvalue()
+        logger.info("GIF encoded: %d bytes (%.1f KB)", len(gif_bytes), len(gif_bytes) / 1024)
+        return gif_bytes
 
 
 def _crop_and_resize_frame(
