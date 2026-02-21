@@ -12,8 +12,6 @@ export class HttpTransport implements ITransport {
   private _connected = false;
   private _reconnecting = false;
   private _deviceName: string | null = null;
-  private _disconnectCb: (() => void) | null = null;
-  private _reconnectCb: (() => void) | null = null;
   private _pollTimer: ReturnType<typeof setInterval> | null = null;
   private _macAddress: string | null = null;
   private _screenSize: number | null = null;
@@ -101,13 +99,9 @@ export class HttpTransport implements ITransport {
     }
   }
 
-  onDisconnect(cb: () => void): void {
-    this._disconnectCb = cb;
-  }
-
-  onReconnect(cb: () => void): void {
-    this._reconnectCb = cb;
-  }
+  // Keep for interface compat — DeviceContext no longer relies on these
+  onDisconnect(): void {}
+  onReconnect(): void {}
 
   private _startPolling(): void {
     this._stopPolling();
@@ -117,35 +111,27 @@ export class HttpTransport implements ITransport {
         if (!res.ok) return;
         const status = await res.json();
 
-        if (status.connected && !this._connected) {
-          // Reconnected!
-          this._connected = true;
-          this._reconnecting = false;
-          this._reconnectCb?.();
-        } else if (!status.connected && status.reconnecting) {
-          // Server is trying to reconnect — keep polling, show reconnecting
-          this._connected = false;
-          this._reconnecting = true;
-          // Don't fire disconnect callback — server is handling it
-        } else if (!status.connected && !status.reconnecting && this._connected) {
+        this._connected = status.connected;
+        this._reconnecting = status.reconnecting;
+
+        if (status.connected) {
+          if (!this._deviceName) {
+            this._deviceName = status.macAddress ? `IDM (${status.macAddress})` : 'IDM (server)';
+          }
+        } else if (!status.reconnecting) {
           // Truly disconnected, server gave up
-          this._connected = false;
-          this._reconnecting = false;
           this._deviceName = null;
-          this._disconnectCb?.();
           this._stopPolling();
         }
+        // If reconnecting, keep polling — server will handle reconnect
       } catch {
         // Server unreachable
-        if (this._connected || this._reconnecting) {
-          this._connected = false;
-          this._reconnecting = false;
-          this._deviceName = null;
-          this._disconnectCb?.();
-          this._stopPolling();
-        }
+        this._connected = false;
+        this._reconnecting = false;
+        this._deviceName = null;
+        this._stopPolling();
       }
-    }, 3000);
+    }, 2000);
   }
 
   private _stopPolling(): void {

@@ -41,21 +41,20 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
   const [deviceName, setDeviceName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Poll reconnecting state from transport
+  // Sync React state from transport every second — single source of truth
   useEffect(() => {
-    if (transportMode !== 'server') return;
     const interval = setInterval(() => {
       const t = transportRef.current;
-      const isReconn = t.isReconnecting?.() ?? false;
-      setReconnecting(isReconn);
-      if (t.isConnected() && !connected) {
-        setConnected(true);
-        setDeviceName(t.deviceName());
-        setReconnecting(false);
-      }
+      const tConnected = t.isConnected();
+      const tReconnecting = t.isReconnecting?.() ?? false;
+      const tName = t.deviceName();
+
+      setConnected(tConnected);
+      setReconnecting(tReconnecting);
+      setDeviceName(tName);
     }, 1000);
     return () => clearInterval(interval);
-  }, [transportMode, connected]);
+  }, []);
 
   useEffect(() => {
     detectServer().then((serverAvailable) => {
@@ -75,26 +74,9 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     setReconnecting(false);
     try {
       await transportRef.current.connect();
-      setConnected(true);
+      // Immediately sync state after connect
+      setConnected(transportRef.current.isConnected());
       setDeviceName(transportRef.current.deviceName());
-
-      transportRef.current.onDisconnect(() => {
-        // Check if transport is reconnecting before declaring disconnected
-        const isReconn = transportRef.current.isReconnecting?.() ?? false;
-        if (isReconn) {
-          setReconnecting(true);
-        } else {
-          setConnected(false);
-          setDeviceName(null);
-          setReconnecting(false);
-        }
-      });
-
-      transportRef.current.onReconnect?.(() => {
-        setConnected(true);
-        setReconnecting(false);
-        setDeviceName(transportRef.current.deviceName());
-      });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Connection failed');
     } finally {
